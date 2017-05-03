@@ -1,6 +1,9 @@
 package water.rapids;
 
-import water.*;
+import water.H2O;
+import water.Key;
+import water.MRTask;
+import water.RPC;
 import water.fvec.Frame;
 import water.fvec.Vec;
 import water.util.ArrayUtils;
@@ -15,6 +18,9 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
   final int _shift[];
   final int _bytesUsed[];
   final long _base[];
+  final double _baseD[];  // store base values for double columns
+  final boolean _isNotDouble[];   // record if a column is numeric
+  private double _maxD;           // store the current double column maximum
 
   RadixOrder(Frame DF, boolean isLeft, int whichCols[], int id_maps[][]) {
     _DF = DF;
@@ -24,6 +30,8 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
     _shift = new int[_whichCols.length];   // currently only _shift[0] is used
     _bytesUsed = new int[_whichCols.length];
     _base = new long[_whichCols.length];
+    _isNotDouble = new boolean[_whichCols.length];
+    _baseD = new double[_whichCols.length];
   }
 
   @Override
@@ -41,7 +49,7 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
     System.out.println("Time to use rollup stats to determine biggestBit: " + ((t1=System.nanoTime()) - t0) / 1e9); t0=t1;
 
     if( _whichCols.length > 0 )
-      new RadixCount(_isLeft, _base[0], _shift[0], _whichCols[0], _isLeft ? _id_maps : null ).doAll(_DF.vec(_whichCols[0]));
+      new RadixCount(_isLeft, _base[0], _shift[0], _whichCols[0], _isLeft ? _id_maps : null, _isNotDouble[0],_baseD[0]).doAll(_DF.vec(_whichCols[0]));
     System.out.println("Time of MSB count MRTask left local on each node (no reduce): " + ((t1=System.nanoTime()) - t0) / 1e9); t0=t1;
 
     // NOT TO DO:  we do need the full allocation of x[] and o[].  We need o[] anyway.  x[] will be compressed and dense.
@@ -55,7 +63,7 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
     // TODO: fix closeLocal() blocking issue and revert to simpler usage of closeLocal()
     Key linkTwoMRTask = Key.make();
     if( _whichCols.length > 0 )
-      new SplitByMSBLocal(_isLeft, _base, _shift[0], keySize, batchSize, _bytesUsed, _whichCols, linkTwoMRTask, _id_maps).doAll(_DF.vecs(_whichCols)); // postLocal needs DKV.put()
+      new SplitByMSBLocal(_isLeft, _base, _shift[0], keySize, batchSize, _bytesUsed, _whichCols, linkTwoMRTask, _id_maps, _isNotDouble, _baseD).doAll(_DF.vecs(_whichCols)); // postLocal needs DKV.put()
     System.out.println("SplitByMSBLocal MRTask (all local per node, no network) took : " + ((t1=System.nanoTime()) - t0) / 1e9); t0=t1;
 
     if( _whichCols.length > 0 )
@@ -128,8 +136,16 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
           max = (long)col.max();
         }
       } else {
-        _base[i] = (long)col.min();
-        max = (long)col.max();
+        if (col.isInt()) {  // deal with integer columns
+          _isNotDouble[i] = true;
+          _base[i] = (long)col.min();
+          max = (long)col.max();
+        } else {  // deal with double columns
+          _isNotDouble[i] = false;    // column is double, use long representation of doubles
+          _baseD[i] = col.min();
+          _maxD = col.max();
+          max=0l;
+        }
       }
 
       // Compute the span or range between min and max.  Compute a
@@ -155,21 +171,30 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
   // low for radix sorting.  Lower the lower-bound to be an even
   // power of the shift.
   private long computeShift( final long max, final int i )  {
-    long range = max - _base[i] + 2; // +1 for when min==max to include the bound, +1 for the leading NA spot
+    long range;
+    if (_isNotDouble[i]) {
+      range = max - _base[i] + 2; // +1 for when min==max to include the bound, +1 for the leading NA spot
+    } else {
+      range = Double.doubleToLongBits(_maxD-_baseD[i]+2); //
+    }
     // number of bits starting from 1 easier to think about (for me)
     int biggestBit = 1 + (int) Math.floor(Math.log(range) / Math.log(2));  
     // TODO: feed back to R warnings()
     if (biggestBit < 8) Log.warn("biggest bit should be >= 8 otherwise need to dip into next column (TODO)");  
     assert biggestBit >= 1;
     _shift[i] = Math.max(8, biggestBit)-8;
-    long MSBwidth = 1L<<_shift[i];
-    if (_base[i] % MSBwidth != 0) {
-      // choose base lower than minimum so as to align boundaries (unless
-      // minimum already on a boundary by chance)
-      _base[i] = MSBwidth * (_base[i]/MSBwidth + (_base[i]<0 ? -1 : 0));
-      assert _base[i] % MSBwidth == 0;
+    if (_isNotDouble[i]) {
+      long MSBwidth = 1L << _shift[i];
+      if (_base[i] % MSBwidth != 0) {
+        // choose base lower than minimum so as to align boundaries (unless
+        // minimum already on a boundary by chance)
+        _base[i] = MSBwidth * (_base[i] / MSBwidth + (_base[i] < 0 ? -1 : 0));
+        assert _base[i] % MSBwidth == 0;
+      }
+      return (max - _base[i] + 1L) >> _shift[i];  // relied on in RadixCount.map
+    } else {
+      return Double.doubleToLongBits(Double.longBitsToDouble(range)-1) >>_shift[i];
     }
-    return (max - _base[i] + 1L) >> _shift[i];  // relied on in RadixCount.map
   }
 
   private static class SendSplitMSB extends MRTask<SendSplitMSB> {

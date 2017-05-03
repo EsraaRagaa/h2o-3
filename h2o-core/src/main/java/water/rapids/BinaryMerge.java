@@ -8,10 +8,11 @@ import water.fvec.Chunk;
 import water.fvec.Frame;
 import water.fvec.NewChunk;
 import water.fvec.Vec;
-import static water.rapids.SingleThreadRadixOrder.getSortedOXHeaderKey;
 import water.util.ArrayUtils;
 
 import java.util.Arrays;
+
+import static water.rapids.SingleThreadRadixOrder.getSortedOXHeaderKey;
 
 class BinaryMerge extends DTask<BinaryMerge> {
   long _numRowsInResult=0;  // returned to caller, so not transient
@@ -49,8 +50,10 @@ class BinaryMerge extends DTask<BinaryMerge> {
     private final long _base[]; // the col.min() of each column in the key
     private final int _fieldSizes[]; // the widths of each column in the key
     private final int _keySize; // the total width in bytes of the key, sum of field sizes
+    private final double _baseD[];  // the col.min() of each column in double
+    private final boolean _isNotDouble[]; // denote if a column is integer or double
 
-    FFSB( Frame frame, int msb, int shift, int fieldSizes[], long base[] ) { 
+    FFSB( Frame frame, int msb, int shift, int fieldSizes[], long base[], double baseD[], boolean isNotDouble[]) {
       assert -1<=msb && msb<=255; // left ranges from 0 to 255, right from -1 to 255
       _frame = frame;
       _msb = msb;
@@ -58,6 +61,8 @@ class BinaryMerge extends DTask<BinaryMerge> {
       _fieldSizes = fieldSizes;
       _keySize = ArrayUtils.sum(fieldSizes);
       _base = base;
+      _baseD = baseD;
+      _isNotDouble = isNotDouble;
       // Create fast lookups to go from chunk index to node index of that chunk
       Vec vec = _vec = frame.anyVec();
       _chunkNode = vec==null ? null : new int[vec.nChunks()];

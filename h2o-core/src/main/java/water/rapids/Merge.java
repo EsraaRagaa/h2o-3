@@ -65,10 +65,14 @@ public class Merge {
     final int riteShift = hasRite ? riteIndex._shift[0] : -1;
     final long riteBase = hasRite ? riteIndex._base [0] : leftBase;
 
-    long leftMSBfrom = (riteBase - leftBase) >> leftShift;  // which leftMSB does the overlap start
+    // initialize for double columns, may not be used....
+    final double leftBaseD = leftIndex._isNotDouble[0] ? 0.0 : leftIndex._baseD[0];
+    final double riteBaseD = hasRite ? (riteIndex._isNotDouble[0] ? 0.0 : riteIndex._baseD[0]) : leftBaseD;
 
+    long leftMSBfrom = leftIndex._isNotDouble[0]?(riteBase - leftBase) >> leftShift:(Double.doubleToRawLongBits(riteBaseD-leftBaseD))>>leftShift;  // which leftMSB does the overlap start
+    boolean riteBaseExceedsleftBase=leftIndex._isNotDouble[0]?(riteBase>leftBase):(riteBaseD>leftBaseD);
     // deal with the left range below the right minimum, if any
-    if (leftBase < riteBase) {
+    if (riteBaseExceedsleftBase) {
       // deal with the range of the left below the start of the right, if any
       assert leftMSBfrom >= 0;
       if (leftMSBfrom>255) {
@@ -79,8 +83,8 @@ public class Merge {
       // The overlapping one with the right base is dealt with inside
       // BinaryMerge (if _allLeft)
       if (allLeft) for (int leftMSB=0; leftMSB<leftMSBfrom; leftMSB++) {
-          BinaryMerge bm = new BinaryMerge(new BinaryMerge.FFSB(leftFrame,   leftMSB    ,leftShift,leftIndex._bytesUsed,leftIndex._base),
-                                           new BinaryMerge.FFSB(riteFrame,/*rightMSB*/-1,riteShift,riteIndex._bytesUsed,riteIndex._base),
+          BinaryMerge bm = new BinaryMerge(new BinaryMerge.FFSB(leftFrame,   leftMSB    ,leftShift,leftIndex._bytesUsed,leftIndex._base, leftIndex._baseD, leftIndex._isNotDouble),
+                                           new BinaryMerge.FFSB(riteFrame,/*rightMSB*/-1,riteShift,riteIndex._bytesUsed,riteIndex._base, riteIndex._baseD, riteIndex._isNotDouble),
                                            true);
           bmList.add(bm);
           fs.add(new RPC<>(SplitByMSBLocal.ownerOfMSB(leftMSB), bm).call());
@@ -105,8 +109,8 @@ public class Merge {
       }
       // run the merge for the whole lefts that start after the last right
       if (allLeft) for (int leftMSB=(int)leftMSBto+1; leftMSB<=255; leftMSB++) {
-          BinaryMerge bm = new BinaryMerge(new BinaryMerge.FFSB(leftFrame,   leftMSB    ,leftShift,leftIndex._bytesUsed,leftIndex._base),
-                                           new BinaryMerge.FFSB(riteFrame,/*rightMSB*/-1,riteShift,riteIndex._bytesUsed,riteIndex._base),
+          BinaryMerge bm = new BinaryMerge(new BinaryMerge.FFSB(leftFrame,   leftMSB    ,leftShift,leftIndex._bytesUsed,leftIndex._base, leftIndex._baseD, leftIndex._isNotDouble),
+                                           new BinaryMerge.FFSB(riteFrame,/*rightMSB*/-1,riteShift,riteIndex._bytesUsed,riteIndex._base, riteIndex._baseD, riteIndex._isNotDouble),
                                            true);
           bmList.add(bm);
           fs.add(new RPC<>(SplitByMSBLocal.ownerOfMSB(leftMSB), bm).call());
@@ -138,8 +142,8 @@ public class Merge {
       assert rightMSBto >= rightMSBfrom;
 
       for (int rightMSB=rightMSBfrom; rightMSB<=rightMSBto; rightMSB++) {
-        BinaryMerge bm = new BinaryMerge(new BinaryMerge.FFSB(leftFrame, leftMSB,leftShift,leftIndex._bytesUsed,leftIndex._base),
-                                         new BinaryMerge.FFSB(riteFrame,rightMSB,riteShift,riteIndex._bytesUsed,riteIndex._base),
+        BinaryMerge bm = new BinaryMerge(new BinaryMerge.FFSB(leftFrame, leftMSB,leftShift,leftIndex._bytesUsed,leftIndex._base,leftIndex._baseD, leftIndex._isNotDouble),
+                                         new BinaryMerge.FFSB(riteFrame,rightMSB,riteShift,riteIndex._bytesUsed,riteIndex._base,riteIndex._baseD,riteIndex._isNotDouble),
                                          allLeft);
         bmList.add(bm);
         // TODO: choose the bigger side to execute on (where that side of index

@@ -12,17 +12,21 @@ class RadixCount extends MRTask<RadixCount> {
   private final int _shift;
   private final int _col;
   private final long _base;
+  private final double _baseD;
   // used to determine the unique DKV names since DF._key is null now and
   // before only an RTMP name anyway
   private final boolean _isLeft; 
   private final int _id_maps[][];
+  private final boolean _isNotDouble;
 
-  RadixCount(boolean isLeft, long base, int shift, int col, int id_maps[][]) {
+  RadixCount(boolean isLeft, long base, int shift, int col, int id_maps[][], boolean isNotDouble, double baseD) {
     _isLeft = isLeft;
     _base = base;
     _col = col;
     _shift = shift;
     _id_maps = id_maps;
+    _isNotDouble = isNotDouble;
+    _baseD = baseD;
   }
 
   // make a unique deterministic key as a function of frame, column and node
@@ -46,16 +50,27 @@ class RadixCount extends MRTask<RadixCount> {
         // There are no NA in this join column; hence branch-free loop. Most
         // common case as should never really have NA in join columns.
         for (int r=0; r<chk._len; r++) {
-          tmp[(int)((chk.at8(r)-_base+1) >> _shift)]++;
-          // TODO - use _mem directly.  Hist the compressed bytes and then shift
-          // the histogram afterwards when reducing.
+          if (_isNotDouble) {
+            tmp[(int) ((chk.at8(r) - _base + 1) >> _shift)]++;
+          } else {
+            long ctrVal = Double.doubleToRawLongBits(chk.atd(r)-_baseD+1)>>_shift;
+            tmp[(int) ctrVal]++;
+          }
         }
       } else {
         // There are some NA in the column so have to branch.  TODO: warn user
         // NA are present in join column
         for (int r=0; r<chk._len; r++) {
           if (chk.isNA(r)) tmp[0]++;
-          else tmp[(int)((chk.at8(r)-_base+1) >> _shift)]++;
+          else {
+            if (_isNotDouble) {
+              tmp[(int) ((chk.at8(r) - _base + 1) >> _shift)]++;
+            } else {
+              long ctrVal = Double.doubleToRawLongBits(chk.atd(r)-_baseD+1)>>_shift;
+              tmp[(int) ctrVal]++;
+            }
+          }
+
           // Done - we will join NA to NA as data.table does
           // TODO: allow NA-to-NA join to be turned off.  Do that in bmerge as a simple low-cost switch.
           // Note that NA and the minimum may well both be in MSB 0 but most of
