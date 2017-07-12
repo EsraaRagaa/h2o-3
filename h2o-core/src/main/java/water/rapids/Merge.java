@@ -95,7 +95,8 @@ public class Merge {
       leftMSBfrom = 0;
     }
 
-    long leftMSBto = (riteBase + (256L<<riteShift) - 1 - leftBase) >> leftShift;
+    long leftMSBto = leftIndex._isNotDouble[0]?((riteBase + (256L<<riteShift) - 1 - leftBase) >> leftShift):
+            (Double.doubleToRawLongBits(riteBaseD-1-leftBase)+(256L<<riteShift)>>leftShift);
     // -1 because the 256L<<riteShift is one after the max extent.  
     // No need -for +1 for NA here because, as for leftMSBfrom above, the NA spot is on -both sides
 
