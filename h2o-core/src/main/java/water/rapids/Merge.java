@@ -96,12 +96,16 @@ public class Merge {
     }
 
     long leftMSBto = leftIndex._isNotDouble[0]?((riteBase + (256L<<riteShift) - 1 - leftBase) >> leftShift):
-            (Double.doubleToRawLongBits(riteBaseD-1-leftBase)+(256L<<riteShift)>>leftShift);
+            (Double.doubleToRawLongBits(riteBaseD-leftBaseD)-1+(256L<<riteShift)>>leftShift);
     // -1 because the 256L<<riteShift is one after the max extent.  
     // No need -for +1 for NA here because, as for leftMSBfrom above, the NA spot is on -both sides
 
-    // deal with the left range above the right maximum, if any
-    if( (leftBase + (256L<<leftShift)) > (riteBase + (256L<<riteShift)) ) {
+    // deal with the left range above the right maximum, if any.  For doubles, -1 from shift to avoid negative outcome
+    boolean leftRangeAboveRightMax = leftIndex._isNotDouble[0]?
+            (leftBase + (256L<<leftShift)) > (riteBase + (256L<<riteShift)):
+            ((leftBaseD + Double.longBitsToDouble(256L<<(leftShift-1)))>(riteBaseD+Double.longBitsToDouble((256L<<(riteShift-1)))));
+
+    if (leftRangeAboveRightMax) {
       assert leftMSBto <= 255;
       if (leftMSBto<0) {
         // The left range starts after the right range ends.  So every left row

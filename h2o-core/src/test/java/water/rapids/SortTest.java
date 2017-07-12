@@ -15,7 +15,7 @@ import java.util.Random;
 import static org.junit.Assert.assertTrue;
 
 public class SortTest extends TestUtil {
-  @BeforeClass public static void setup() { stall_till_cloudsize(2); }
+  @BeforeClass public static void setup() { stall_till_cloudsize(1); }
 
   @Test public void testBasicSortRapids() {
     Frame fr = null, res = null;
@@ -205,9 +205,9 @@ public class SortTest extends TestUtil {
     Frame fr=null, sorted=null;
     try {
       // junit will not take data from bigdata/laptop!
-     // fr = parse_test_file("bigdata/laptop/jira/TopBottomNRep4.csv.zip");  // first test no NA frame
-      fr = parse_test_file("smalldata/synthetic/integerFrame.csv");  // first test no NA frame
-      sorted = fr.sort(new int[]{0});
+      fr = parse_test_file("bigdata/laptop/jira/TopBottomNRep4.csv.zip");  // first test no NA frame
+     // fr = parse_test_file("smalldata/synthetic/integerFrame.csv");  // first test no NA frame
+      sorted = fr.sort(new int[]{1});
       Scope.track(fr);
       Scope.track(sorted);
       testSort(sorted, fr,0);
