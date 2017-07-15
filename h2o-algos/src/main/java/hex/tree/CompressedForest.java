@@ -7,8 +7,12 @@ import water.Key;
 public class CompressedForest extends Iced<CompressedTree> {
 
   public Key<CompressedTree>[/*_ntrees*/][/*_nclass*/] _treeKeys;
+  public String[][] _domains;
 
-  public CompressedForest(Key<CompressedTree>[][] treeKeys) { _treeKeys = treeKeys; }
+  public CompressedForest(Key<CompressedTree>[][] treeKeys, String[][] domains) {
+    _treeKeys = treeKeys;
+    _domains = domains;
+  }
 
   public LocalCompressedForest fetch() {
     int ntrees = _treeKeys.length;
@@ -21,13 +25,17 @@ public class CompressedForest extends Iced<CompressedTree> {
         if (treek[i] != null)
           trees[t][i] = DKV.get(treek[i]).get();
     }
-    return new LocalCompressedForest(trees);
+    return new LocalCompressedForest(trees, _domains);
   }
 
   public static class LocalCompressedForest {
     public CompressedTree[][] _trees;
+    public String[][] _domains;
 
-    LocalCompressedForest(CompressedTree[][] trees) { _trees = trees; }
+    private LocalCompressedForest(CompressedTree[][] trees, String[][] domains) {
+      _trees = trees;
+      _domains = domains;
+    }
 
     /** Score given tree on the row of data.
      *  @param data row of data
@@ -37,7 +45,7 @@ public class CompressedForest extends Iced<CompressedTree> {
       CompressedTree[] ts = _trees[tidx];
       for( int c=0; c<ts.length; c++ )
         if( ts[c] != null )
-          preds[ts.length==1?0:c+1] += ts[c].score(data);
+          preds[ts.length==1?0:c+1] += ts[c].score(data, _domains);
     }
   }
 
